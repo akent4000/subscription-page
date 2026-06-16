@@ -3,7 +3,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: remnawave-subscription-page
+    hostname: remnawave-subscription-page
+    restart: always
     env_file:
       - .env
     ports:
       - '127.0.0.1:3010:3010'
+    healthcheck:
+      # Plain TCP check — every real route here calls out to the Remnawave panel
+      # or destroys the socket on purpose (favicon.ico etc.), so HTTP-status-based
+      # checks aren't reliable. This only confirms the process is up and listening.
+      test: ['CMD-SHELL', "bash -c '</dev/tcp/127.0.0.1/3010' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

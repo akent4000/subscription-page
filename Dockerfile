@@ -1,3 +1,15 @@
+FROM node:24.14-trixie-slim AS frontend-build
+WORKDIR /opt/app
+
+COPY frontend/package*.json frontend/.npmrc ./
+
+RUN npm ci
+
+COPY frontend/ .
+
+ENV NODE_ENV=production
+RUN npm run start:build
+
 FROM node:24.14-trixie-slim AS backend-build
 WORKDIR /opt/app
 
@@ -11,7 +23,7 @@ COPY backend/ .
 
 RUN npm run build
 
-RUN npm cache clean --force 
+RUN npm cache clean --force
 
 RUN npm prune --omit=dev
 
@@ -32,7 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY --from=backend-build /opt/app/dist ./dist
 COPY --from=backend-build /opt/app/node_modules ./node_modules
 
-COPY frontend/dist/ ./frontend/
+COPY --from=frontend-build /opt/app/dist/ ./frontend/
 
 COPY backend/package*.json ./
 
