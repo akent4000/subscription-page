@@ -19,6 +19,12 @@ import { useTranslation } from '@shared/hooks'
 
 import classes from './subscription-link.module.css'
 
+declare global {
+    interface Window {
+        __HAPP_CRYPT_LINK__?: string
+    }
+}
+
 interface IProps {
     hideGetLink: boolean
     supportUrl: string
@@ -29,10 +35,11 @@ export const SubscriptionLinkWidget = ({ supportUrl, hideGetLink }: IProps) => {
     const subscription = useSubscription()
     const clipboard = useClipboard({ timeout: 10000 })
 
-    const subscriptionUrl = constructSubscriptionUrl(
-        window.location.href,
-        subscription.user.shortUuid
-    )
+    // On /link/<token> pages the backend injects a happ://crypt4/ deep link here —
+    // the raw subscription URL (and shortUuid) must never be exposed on that page.
+    const subscriptionUrl =
+        window.__HAPP_CRYPT_LINK__ ||
+        constructSubscriptionUrl(window.location.href, subscription.user.shortUuid)
 
     const handleCopy = () => {
         notifications.show({

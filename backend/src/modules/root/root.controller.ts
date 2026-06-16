@@ -29,6 +29,18 @@ export class RootController {
         return await this.subpageConfigService.getSubscriptionPageConfig(user.su, request);
     }
 
+    // Must be registered before the ':shortUuid' routes below, otherwise
+    // Express would match '/link/<token>' as shortUuid='link', clientType='<token>'.
+    @Get('link/:token')
+    async link(
+        @ClientIp() clientIp: string,
+        @Req() request: Request,
+        @Res() response: Response,
+        @Param('token') token: string,
+    ) {
+        return await this.rootService.serveCryptLinkPage(clientIp, request, response, token);
+    }
+
     @Get([':shortUuid', ':shortUuid/:clientType'])
     async root(
         @ClientIp() clientIp: string,

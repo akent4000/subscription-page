@@ -37,6 +37,12 @@ export const configSchema = z
         MARZBAN_LEGACY_DROP_REVOKED_SUBSCRIPTIONS: booleanString(),
         INTERNAL_JWT_SECRET: z.string(),
         EGAMES_COOKIE: z.optional(z.string()),
+
+        // Secret used to encrypt/decrypt shortUuid <-> /link/<token>
+        CRYPT_LINK_SECRET: z.string(),
+        // Public base URL of this subscription page, e.g. https://sub.example.com
+        // Used to build the URL that gets wrapped into the happ://crypt4/ link
+        SUB_PUBLIC_URL: z.string(),
     })
     .superRefine((data, ctx) => {
         if (

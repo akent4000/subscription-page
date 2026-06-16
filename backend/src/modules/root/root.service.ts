@@ -12,6 +12,8 @@ import { TypedConfigService } from '@common/config/app-config';
 import { AxiosService } from '@common/axios/axios.service';
 import { IGNORED_HEADERS } from '@common/constants';
 import { sanitizeUsername } from '@common/utils';
+import { decryptUuid, encryptUuid } from '@common/utils/crypt-utils';
+import { createHappCryptoLink } from '@common/utils/happ-crypt';
 
 import { SubpageConfigService } from './subpage-config.service';
 
@@ -22,6 +24,8 @@ export class RootService {
     private readonly isMarzbanLegacyLinkEnabled: boolean;
     private readonly marzbanSecretKeys: string[];
     private readonly mlDropRevokedSubscriptions: boolean;
+    private readonly cryptLinkSecret: string;
+    private readonly subPublicUrl: string;
     constructor(
         private readonly configService: TypedConfigService,
         private readonly jwtService: JwtService,
@@ -34,6 +38,8 @@ export class RootService {
         this.mlDropRevokedSubscriptions = this.configService.getOrThrow(
             'MARZBAN_LEGACY_DROP_REVOKED_SUBSCRIPTIONS',
         );
+        this.cryptLinkSecret = this.configService.getOrThrow('CRYPT_LINK_SECRET');
+        this.subPublicUrl = this.configService.getOrThrow('SUB_PUBLIC_URL').replace(/\/$/, '');
 
         const marzbanSecretKeys = this.configService.get('MARZBAN_LEGACY_SECRET_KEY');
 
@@ -94,8 +100,10 @@ export class RootService {
                 }
             }
 
-            if (userAgent && this.isBrowser(userAgent)) {
-                return this.returnWebpage(clientIp, req, res, shortUuidLocal);
+            if (!this.isHapp(userAgent)) {
+                const token = encryptUuid(shortUuidLocal, this.cryptLinkSecret);
+                res.redirect(302, `/link/${token}`);
+                return;
             }
 
             const subscriptionDataResponse = await this.axiosService.getSubscription(
@@ -141,19 +149,8 @@ export class RootService {
         );
     }
 
-    private isBrowser(userAgent: string): boolean {
-        const browserKeywords = [
-            'Mozilla',
-            'Chrome',
-            'Safari',
-            'Firefox',
-            'Opera',
-            'Edge',
-            'TelegramBot',
-            'WhatsApp',
-        ];
-
-        return browserKeywords.some((keyword) => userAgent.includes(keyword));
+    private isHapp(userAgent: string | undefined): boolean {
+        return !!userAgent && userAgent.startsWith('Happ/');
     }
 
     private isGenericPath(path: string): boolean {
@@ -172,13 +169,20 @@ export class RootService {
         return genericPaths.some((genericPath) => path.includes(genericPath));
     }
 
-    private async returnWebpage(
+    public async serveCryptLinkPage(
         clientIp: string,
         req: Request,
         res: Response,
-        shortUuid: string,
+        token: string,
     ): Promise<void> {
         try {
+            const shortUuid = decryptUuid(token, this.cryptLinkSecret);
+
+            if (!shortUuid) {
+                res.socket?.destroy();
+                return;
+            }
+
             const subscriptionDataResponse = await this.axiosService.getSubscriptionInfo(
                 clientIp,
                 shortUuid,
@@ -211,12 +215,22 @@ export class RootService {
                 subpageConfig.subpageConfigUuid,
             );
 
+            const happCryptLink = createHappCryptoLink(`${this.subPublicUrl}/${shortUuid}`);
+
+            if (!happCryptLink) {
+                this.logger.error(`Failed to create Happ crypto link for ${shortUuid}`);
+                res.socket?.destroy();
+                return;
+            }
+
             const subscriptionData = subscriptionDataResponse.response;
 
-            if (!baseSettings.showConnectionKeys) {
-                subscriptionData.response.links = [];
-                subscriptionData.response.ssConfLinks = {};
-            }
+            // Raw vless/vmess/... links and the raw subscription URL never reach this
+            // page — only the crypt link, and only if the admin allows showing keys at all.
+            subscriptionData.response.links = baseSettings.showConnectionKeys
+                ? [happCryptLink]
+                : [];
+            subscriptionData.response.ssConfLinks = {};
 
             res.cookie('session', this.generateJwtForCookie(subpageConfig.subpageConfigUuid), {
                 httpOnly: true,
@@ -228,9 +242,10 @@ export class RootService {
                 metaTitle: baseSettings.metaTitle,
                 metaDescription: baseSettings.metaDescription,
                 panelData: Buffer.from(JSON.stringify(subscriptionData)).toString('base64'),
+                happCryptLink,
             });
         } catch (error) {
-            this.logger.error(`Error in returnWebpage: ${error}`);
+            this.logger.error(`Error in serveCryptLinkPage: ${error}`);
 
             res.socket?.destroy();
             return;
