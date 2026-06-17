@@ -142,3 +142,7 @@ docker-compose-local.yml
 /backend/.env
 
 /frontend/public/assets/.app-config-v2.json
+
+.claude
+CLAUDE.md
+docker-compose.override.yml

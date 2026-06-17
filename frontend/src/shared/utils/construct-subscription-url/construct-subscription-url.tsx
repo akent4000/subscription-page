@@ -1,4 +1,4 @@
-import { joinURL, parseURL, stringifyParsedURL } from 'ufo'
+import { parseURL, stringifyParsedURL } from 'ufo'
 
 export const constructSubscriptionUrl = (currentUrl: string, shortUuid: string): string => {
     const url = parseURL(currentUrl)
@@ -7,14 +7,10 @@ export const constructSubscriptionUrl = (currentUrl: string, shortUuid: string):
     url.hash = ''
     url.auth = ''
 
-    const segments = url.pathname.split('/').filter(Boolean)
-    const lastSegment = segments.at(-1)
-
-    if (lastSegment !== shortUuid) {
-        segments.pop()
-        segments.push(shortUuid)
-        url.pathname = joinURL('/', ...segments)
-    }
+    // The page itself is served at /link/<token>, not at the raw subscription
+    // route — the raw endpoint is always /<shortUuid> off the origin, regardless
+    // of which path the page was loaded from.
+    url.pathname = `/${shortUuid}`
 
     return stringifyParsedURL(url)
 }
