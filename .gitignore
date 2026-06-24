@@ -145,4 +145,5 @@ docker-compose-local.yml
 
 .claude
 CLAUDE.md
+.codegraph
 docker-compose.override.yml
